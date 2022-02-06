@@ -1,0 +1,922 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8" /><title>Beyond the Seas</title>
+    <script
+src="//cdn.jsdelivr.net/npm/phaser@3.11.0/dist/phaser.js"></script>
+    <style type="text/css"> body { margin: 0; }</style>
+</head>
+
+<body>
+    <script type="text/javascript">
+
+
+    var config = {
+        type: Phaser.AUTO,
+        width: 1920, height: 960,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 0 },
+                debug: false
+            }},
+        scene: {preload: preload, create: create, update: update },
+        input:{gamepad:true},
+    };
+new Phaser.Game(config);
+
+
+var platforms;
+var player;
+var enemy;
+var cursors;
+var stars;
+var score = 0;
+var healthPlayer = 3;
+var healthEnemy = 1;
+var healthValue;
+var gamepad;
+var music;
+var weapon = false;
+var inputMethod = "keyboard";
+var speed = 1;
+var hud;
+var weaponInfos;
+isFiring = false;
+
+isConnected = false;
+gameOver = false;
+
+
+
+function preload(){
+    
+    this.load.audio('theme', ['assets/music.mp3','assets/music.ogg']);
+    this.load.audio('weaponSound', ['assets/weapon.wav']);
+    this.load.audio('radioSound', ['assets/radioSound.wav']);
+    this.load.image('bg', 'assets/bg.png');
+    this.load.image('ground', 'assets/platform.png');
+
+
+    //Message Radio
+
+    this.load.image('messageDébut', 'assets/messageDebut.png');
+    this.load.image('messageFin', 'assets/messageFin.png');
+    this.load.image('messageMort', 'assets/messageMort.png');
+    
+    
+    //this.load.image('star', 'assets/star.png');
+    this.load.image('bomb', 'assets/bomb.png');
+    this.load.image('pausebg', 'assets/pausebg.png');
+
+    this.load.image('weaponInfos', 'assets/weaponInfos.png');
+    this.load.image('CMD', 'assets/CMD.png');
+
+
+    this.load.image('bullet', 'assets/bullet.png');
+    this.load.image('pausetitle', 'assets/pause.png');
+    this.load.image('rock1', 'assets/rock1.png');
+    this.load.spritesheet('perso','assets/swimmingRight.png',
+        { frameWidth: 128, frameHeight: 128 });
+    this.load.spritesheet('health','assets/health.png',
+    { frameWidth: 600, frameHeight: 180 });
+    
+    this.load.spritesheet('ability','assets/weapon.png',
+    { frameWidth: 256, frameHeight: 256 });
+
+    this.load.spritesheet('enemy','assets/enemyFish.png',
+    { frameWidth: 512, frameHeight: 512 });
+
+    this.load.spritesheet('fishTrap','assets/trap.png',
+    { frameWidth: 200, frameHeight: 500 });
+
+    
+}
+
+
+
+
+function create(){
+
+
+    
+    //Creation des objets, joueur, ennemis 
+    
+
+    this.add.image(2880, 540, 'bg').setScale(1);
+    enemy = this.physics.add.sprite(1700, 720, 'enemy').setScale(0.3);
+    enemy1 = this.physics.add.sprite(4500, 200, 'enemy').setScale(0.3);
+    ability = this.physics.add.sprite(800, 500, 'ability').setScale(0.5);
+    trap = this.physics.add.sprite(3270, 800, 'fishTrap').setScale(0.8);
+
+    finalPoint = this.physics.add.sprite(5500, 900).setSize(400, 400);
+
+    platforms = this.physics.add.staticGroup();
+    platforms.create(1670, 200, 'rock1').setScale(1).refreshBody();
+    platforms.create(4000, 1080, 'ground').setScale(1).refreshBody();
+    player = this.physics.add.sprite(250, 800, 'swimmingRight').setScale(1).setSize(120, 70).setOffset(-40, -20) ;
+    
+    
+    player.setBounce(0);
+    player.setCollideWorldBounds(true);
+    this.physics.add.collider(player, platforms);
+    
+    //chargement des sons 
+    
+    music = this.sound.add('theme');
+    weaponSound = this.sound.add('weaponSound');
+    radioSound = this.sound.add('radioSound');
+     
+
+    // création du groupe "bullet"
+    
+    bullet = this.physics.add.group();
+
+    // empêche que les collisions fassent bouger les cibles
+
+    enemy.body.immovable = true;
+    enemy1.body.immovable = true;
+    trap.body.immovable = true;
+    finalPoint.body.immovable = true;
+
+    player.invincible = false;
+    hudHealth = this.physics.add.sprite(190, 70, 'health').setScale(0.6).setScrollFactor(0);
+   
+    music.play();
+   
+    //création des collisions entre éléments 
+
+    this.physics.add.collider(player, enemy, hitEnemy,null,this);
+    this.physics.add.collider(player, enemy1, hitEnemy1,null,this);
+
+
+    this.physics.add.collider(player, finalPoint, finalPointReached,null,this);
+
+    this.physics.add.collider(player, trap, killPlayer,null,this);
+
+    this.physics.add.collider(player, ability, collectAbility,null,this);
+    this.physics.add.collider(bullet, enemy, damageEnemy,null,this);
+    this.physics.add.collider(bullet, enemy1, damageEnemy1,null,this);
+
+
+    this.physics.world.setBounds(0, 0, 5760,1080)
+    this.cameras.main.setBounds(0, 0, 5760, 1080);
+    this.cameras.main.startFollow(player);
+
+    weaponInfos = this.physics.add.sprite(920, 480, 'weaponInfos').setScale(1).setScrollFactor(0);
+    weaponInfos.destroy();
+    
+// animations 
+
+
+    this.anims.create({
+        key: 'up',
+        frames: this.anims.generateFrameNumbers('perso', {start:0,end:10}),
+        frameRate: 10,
+        repeat: -1
+    });
+
+    this.anims.create({
+        key: 'down',
+        frames: this.anims.generateFrameNumbers('perso', {start:0,end:10}),
+        frameRate: 10,
+        repeat: -1
+    });
+
+    this.anims.create({
+        key: 'left',
+        frames: this.anims.generateFrameNumbers('perso', {start:0,end:10}),
+        frameRate: 10,
+        repeat: -1
+    });
+
+    this.anims.create({
+        key: 'turn',
+        frames: [ { key: 'perso', frame: 4 } ],
+        frameRate: 20
+    });
+    this.anims.create({
+        key: 'right',
+        frames: this.anims.generateFrameNumbers('perso', {start:0,end:10}),
+        frameRate: 10,
+        repeat: -1
+        
+    });
+
+    this.anims.create({
+        key: '0out3',
+        frames: this.anims.generateFrameNumbers('health', {start:3,end:3}),
+        frameRate: 10,
+        repeat: -1
+        
+    });
+
+    this.anims.create({
+        key: '1out3',
+        frames: this.anims.generateFrameNumbers('health', {start:2,end:2}),
+        frameRate: 10,
+        repeat: -1
+        
+    });
+
+    this.anims.create({
+        key: '2out3',
+        frames: this.anims.generateFrameNumbers('health', {start:1,end:1}),
+        frameRate: 10,
+        repeat: -1
+        
+    });
+
+    this.anims.create({
+        key: 'weapon',
+        frames: this.anims.generateFrameNumbers('ability', {start:0,end:5}),
+        frameRate: 6,
+        repeat: -1
+        
+    });
+
+    this.anims.create({
+        key: 'idle',
+        frames: this.anims.generateFrameNumbers('enemy', {start:0,end:0}),
+        frameRate: 7,
+        repeat: 5
+        
+    });
+
+    this.anims.create({
+        key: 'bite',
+        frames: this.anims.generateFrameNumbers('enemy', {start:0,end:4}),
+        frameRate: 7,
+        repeat: 0
+        
+    });
+
+    this.anims.create({
+        key: 'idle',
+        frames: this.anims.generateFrameNumbers('fishTrap', {start:0,end:0}),
+        frameRate: 7,
+        repeat: 0
+        
+    });
+
+    this.anims.create({
+        key: 'net',
+        frames: this.anims.generateFrameNumbers('fishTrap', {start:0,end:8}),
+        frameRate: 7,
+        repeat: 0
+        
+    });
+
+// affichage des messages avec délai
+    
+    cursors = this.input.keyboard.createCursorKeys();
+
+    setTimeout(() => {
+
+        infosCMD = this.add.image(1650, 300, 'CMD').setScale(0.8).setScrollFactor(0);
+
+        setTimeout(() => {
+
+            infosCMD.destroy();
+
+
+
+        }, 17000);
+
+
+
+
+    }, 8000);
+
+    setTimeout(() => {
+
+    messageDebut = this.add.image(450, 750, 'messageDébut').setScale(0.8).setScrollFactor(0);
+
+        setTimeout(() => {
+
+            messageDebut.destroy();
+            
+
+
+
+        }, 6000);
+
+        radioSound.play();
+
+
+}, 2000);
+
+
+    
+
+}
+
+var timer = 0;
+var timerFishTrap = 0;
+
+function update(time,delta){
+
+   
+    ability.anims.play('weapon', true);
+
+    // Message game over
+
+    if (gameOver){
+
+            setTimeout(() => {
+
+            messageMort = this.add.image(450, 700, 'messageMort').setScale(0.8).setScrollFactor(0);
+
+                setTimeout(() => {
+
+                    messageMort.destroy();
+                    
+
+
+
+                }, 6000);
+
+                this.radioSound.gameOverSoundRadio();
+
+
+            }, 1000);
+
+    }
+                
+    // déclenchements aléatoires des animations de morsure des ennemis
+
+    timer += delta;     
+    if (timer > Phaser.Math.Between(800, 10000)) {
+
+        enemy.anims.play('bite', true)
+        
+        timer = 0;
+        
+    }
+
+    if (timer > Phaser.Math.Between(800, 10000)) {
+
+        enemy1.anims.play('bite', true)
+
+        timer = 0;
+
+    }
+
+    timerFishTrap += delta;    
+    if (timerFishTrap > Phaser.Math.Between(2300, 6000)) {
+
+        trap.anims.play('net', true)
+
+        timerFishTrap = 0;
+
+    }
+
+    // frames d'invulnérabilité
+
+    if (player.invincible == true){
+
+        setTimeout(() => {
+
+            player.invincible = false;
+            player.clearTint();
+
+
+        }, 1500);
+
+
+    }
+
+    // empêche de tirer non-stop avec l'arme (partiellement fonctionnel)
+
+    if (isFiring == true){
+
+        setTimeout(() => {
+
+            isFiring = false;
+            
+
+
+        }, 800);
+
+
+    }
+
+
+    // patterns de déplacement des ennemis
+
+
+        //Enemy1
+        if (enemy.x < 1800 && enemy.body.velocity.x <= 0) {
+
+                enemy.setVelocityX(100);
+                enemy.flipX=true;
+
+               
+            } 
+            
+            
+        else if (enemy.x > 2500 && enemy.body.velocity.x > 0) {
+
+            enemy.setVelocityX(-100);
+            enemy.flipX=false;
+
+        
+        }
+
+        //Enemy2
+        if (enemy1.y < 300 && enemy1.body.velocity.y <= 0) {
+
+            enemy1.setVelocityY(100);
+            enemy1.flipX=true;
+            enemy1.angle = 90;
+
+
+            } 
+
+
+            else if (enemy1.y > 1000 && enemy1.body.velocity.y > 0) {
+
+            enemy1.setVelocityY(-100);
+            enemy1.angle = -90;
+
+
+        }
+
+    if (gameOver){return;}
+
+    if (isConnected == false)
+
+        // contrôles au clavier
+        
+        if (cursors.left.isDown && cursors.down.isDown == false){ //si la touche gauche est appuyée
+            player.setVelocityX(-100 * speed); 
+ 
+            player.anims.play('left', true); //et animation => gauche
+            player.angle = 180;
+            player.setSize(120, 70).setOffset(-40, -20) 
+            
+            
+        }
+        
+        else if (cursors.left.isDown == false && cursors.down.isDown){ //si la touche gauche est appuyée
+            player.setVelocityY(100 * speed); //alors vitesse négative en X
+            player.anims.play('down', true); //et animation => gauche
+            player.angle = 90;
+            player.setSize(70, 120).setOffset(-20, -30)
+            
+        }
+
+        else if (cursors.left.isDown && cursors.down.isDown ){ //si la touche gauche est appuyée
+            player.setVelocityX(-100 * speed); //alors vitesse négative en X
+            player.setVelocityY(100 * speed);
+            player.anims.play('left', true); //et animation => gauche
+            player.angle = 135;
+            player.setSize(120, 70).setOffset(-40, -20) 
+            
+        }
+
+        else if (cursors.left.isDown && cursors.up.isDown ){ //si la touche gauche est appuyée
+            player.setVelocityX(-100 * speed); //alors vitesse négative en X
+            player.setVelocityY(-100 * speed);
+            player.anims.play('left', true); //et animation => gauche
+            player.angle = -135;
+            player.setSize(120, 70).setOffset(-40, -20) 
+            
+        }
+        
+
+        else if (cursors.right.isDown && cursors.up.isDown){ //sinon si la touche droite est appuyée
+            player.setVelocityX(100 * speed); //alors vitesse positive en X
+            player.setVelocityY(-100  * speed);
+            player.anims.play('right', true); //et animation => droite
+            player.angle = -45;
+            player.setSize(120, 70).setOffset(-40, -20) 
+        }
+        else if (cursors.right.isDown == false && cursors.down.isDown == false && cursors.up.isDown){
+            //si touche haut appuyée ET que le perso touche le sol
+            player.setVelocityY(-100  * speed); //alors vitesse verticale négative
+            player.anims.play('up', true); 
+            player.angle = -90;
+            player.setSize(70, 120).setOffset(-25, -40) 
+            
+        }
+
+        else if (cursors.right.isDown && cursors.up.isDown == false ){
+            
+            player.setVelocityX(100  * speed); 
+            
+            player.anims.play('up', true); 
+            player.angle = 0;
+            player.setSize(120, 70).setOffset(-35, -30) 
+            
+        }
+
+        else if (cursors.right.isDown && cursors.down.isDown && cursors.up.isDown == false){
+            
+            player.setVelocityX(100  * speed); 
+            player.setVelocityY(100  * speed); 
+            
+            player.anims.play('down', true); 
+            player.angle = 45;
+            player.setSize(120, 70).setOffset(-25, -40) 
+            
+        }
+
+        
+        
+        
+        
+        else{ // sinon
+            player.setVelocityX(0); //vitesse nulle
+            player.anims.play('turn');
+            player.setVelocityY(0);
+            
+        }
+
+        // attaque avec l'arme
+
+        if (cursors.space.isDown && !isFiring && weapon == true){ 
+            if (player.angle == 0){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x + 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(300)
+                bulletShot.setAccelerationX(300)
+                bullet.allowGravity = false;
+                
+            }
+
+            if (player.angle == 45){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x + 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(300)
+                bulletShot.setAccelerationX(300)
+                bulletShot.setVelocityY(300)
+                bulletShot.setAccelerationY(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 180){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x - 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(-300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 90){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y + 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 135){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y + 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(-300)
+                bulletShot.setVelocityX(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == -90){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y - 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(- 300)
+                bullet.allowGravity = false;
+
+            }
+
+            
+        }
+        
+        // Acceleration sous l'eau
+
+        if (cursors.shift.isDown){
+        
+            speed = 3;
+
+        }
+        
+        
+    this.input.gamepad.once('connected', function (pad) {
+
+        gamepad = pad;
+        isConnected = true;
+
+    });
+
+    if (isConnected){
+    
+
+        
+
+         // contrôles à la manette
+        
+         if (gamepad.leftStick.x < 0 ){ //si la touche gauche est appuyée
+            player.setVelocityX(-100 * speed); 
+ 
+            player.anims.play('left', true); //et animation => gauche
+            player.angle = 180;
+            player.setSize(120, 70).setOffset(-40, -20) 
+            
+        }
+        
+        else if (gamepad.leftStick.x > 0){ //si la touche gauche est appuyée
+            player.setVelocityX(100 * speed); //alors vitesse négative en X
+            player.anims.play('right', true); //et animation => gauche
+            player.angle = 0;
+            player.setSize(120, 70).setOffset(-40, -20)
+            
+        }
+
+        else if (gamepad.leftStick.y < 0 ){ //si la touche gauche est appuyée
+            player.setVelocityY(-100 * speed); //alors vitesse négative en X
+            
+            player.anims.play('up', true); //et animation => gauche
+            player.angle = -90;
+            player.setSize(70, 120).setOffset(-30, -40) 
+            
+        }
+
+        else if (gamepad.leftStick.y > 0){ //si la touche gauche est appuyée
+            
+            player.setVelocityY(100 * speed);
+            player.anims.play('down', true); //et animation => gauche
+            player.angle = 90;
+            player.setSize(70, 120).setOffset(-30, -40) 
+            
+        }
+
+        
+        
+        
+        
+        else{ // sinon
+            player.setVelocityX(0); //vitesse nulle
+            player.anims.play('turn');
+            player.setVelocityY(0);
+            
+        }
+
+        if (gamepad.X && !isFiring && weapon == true){ 
+            if (player.angle == 0){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x + 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(300)
+                bulletShot.setAccelerationX(300)
+                bullet.allowGravity = false;
+                
+            }
+
+            if (player.angle == 45){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x + 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(300)
+                bulletShot.setAccelerationX(300)
+                bulletShot.setVelocityY(300)
+                bulletShot.setAccelerationY(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 180){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x - 50, player.y,'bullet').setScale(0.3);
+                bulletShot.setVelocityX(-300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 90){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y + 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == 135){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y + 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(-300)
+                bulletShot.setVelocityX(300)
+                bullet.allowGravity = false;
+
+            }
+
+            if (player.angle == -90){
+
+                isFiring = true;
+                var bulletShot = bullet.create(player.x, player.y - 50,'bullet').setScale(0.3);
+                bulletShot.setVelocityY(- 300)
+                bullet.allowGravity = false;
+
+            }
+
+            
+        }
+    
+
+        if (gamepad.L2){
+        
+            speed = 3;
+
+        }
+        
+        if (gamepad.L2 == false && cursors.shift.isDown == false){
+        
+            speed = 1.5;
+
+        }
+
+        
+        if (gamepad.start){
+           
+            restart()
+        }
+        
+    }
+}
+
+// Fonctions
+
+function killPlayer(player, trap){
+
+    healthPlayer = 0;
+    hudHealth.anims.play('0out3', true);
+    player.destroy();
+    gameOver = true;
+
+}
+
+function fishBite (enemy){
+
+    enemy.anims.play('bite', true)
+
+
+}
+
+function damageEnemy(bullet, enemy){
+
+    bullet.destroy();
+    enemy.destroy();
+
+
+}
+
+function damageEnemy1(bullet, enemy1){
+
+    bullet.destroy();
+    enemy1.destroy();
+
+
+}
+
+function collectAbility(player, ability){
+    
+    ability.destroy(); // l'objet disparaît
+    weaponSound.play();
+    
+    weapon = true;
+
+    setTimeout(() => {
+
+        weaponInfos = this.add.image(920, 480, 'weaponInfos').setScale(1).setScrollFactor(0);
+
+        setTimeout(() => {
+
+            weaponInfos.destroy();
+
+
+
+        }, 10000);
+
+    }, 2000);
+
+
+}
+
+    
+
+function hitEnemy(player, enemy){
+    
+    if(healthPlayer == 3 && player.invincible == false){
+
+        healthPlayer = 2;
+        hudHealth.anims.play('2out3', true);
+        player.invincible = true;
+        player.setTint('0xff0000');
+        
+        
+        
+
+    }
+
+    if(healthPlayer == 2 && player.invincible == false ){
+
+        healthPlayer = 1;
+        hudHealth.anims.play('1out3', true);
+        player.invincible = true;
+        player.tint = ('0xff0000');
+        
+
+    }
+
+    if(healthPlayer == 1 && player.invincible == false){
+
+        healthPlayer = 0;
+        hudHealth.anims.play('0out3', true);
+        gameOver = true;
+        player.tint = ('0xff0000');
+        
+        
+    }
+
+}
+
+function hitEnemy1(player, enemy1){
+    
+    if(healthPlayer == 3 && player.invincible == false){
+
+        healthPlayer = 2;
+        hudHealth.anims.play('2out3', true);
+        player.invincible = true;
+        player.setTint('0xff0000');
+        
+        
+        
+
+    }
+
+    if(healthPlayer == 2 && player.invincible == false ){
+
+        healthPlayer = 1;
+        hudHealth.anims.play('1out3', true);
+        player.invincible = true;
+        player.tint = ('0xff0000');
+        
+
+    }
+
+    if(healthPlayer == 1 && player.invincible == false){
+
+        healthPlayer = 0;
+        hudHealth.anims.play('0out3', true);
+        gameOver = true;
+        player.destroy();
+        
+        
+        
+        
+    }
+
+}
+
+function gameOverSoundRadio (radioSound){
+
+    radioSound.play();
+
+
+}
+
+function finalPointReached (player,final){
+
+    setTimeout(() => {
+
+        messageFin = this.add.image(450, 750, 'messageFin').setScale(0.8).setScrollFactor(0);
+
+            setTimeout(() => {
+
+                messageFin.destroy();
+                
+
+
+
+            }, 6000);
+
+            radioSound.play();
+
+
+        }, 2000);
+
+
+}
+
+    </script>
+</body>
+</html>
+    
